@@ -1,0 +1,5 @@
+[
+  {"id": "SOL-1001", "asunto": "Acceso a VPN", "descripcion": "Usuario sin acceso a la VPN corporativa desde casa", "estado": "En progreso", "prioridad": "Alta", "responsable": "Soporte TI", "created_at": "2026-10-20"},
+  {"id": "SOL-1002", "asunto": "Actualización de software", "descripcion": "Actualizar cliente de gestión de inventarios", "estado": "Pendiente", "prioridad": "Media", "responsable": "Aplicaciones", "created_at": "2026-10-21"},
+  {"id": "SOL-1003", "asunto": "Reporte de disponibilidad", "descripcion": "Generación de un informe mensual", "estado": "Finalizado", "prioridad": "Baja", "responsable": "Analítica", "created_at": "2026-10-19"}
+]
