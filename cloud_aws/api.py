@@ -66,8 +66,22 @@ def create_cloud_app(llm=None, vector=None, audit=None):
         return resp
 
     @app.exception_handler(GeminiUnavailable)
-    async def llm_error(_:Request, __:GeminiUnavailable):
-        return JSONResponse(status_code=503,content={'detail':'Proveedor de IA no disponible'})
+    async def llm_error(_: Request, exc: GeminiUnavailable):
+        cause = exc.__cause__
+        status = getattr(cause, "code", "N/A")
+
+        print(
+            f"IC7_GEMINI_FAILURE "
+            f"reason={str(exc)[:100]} "
+            f"cause={type(cause).__name__ if cause else 'None'} "
+            f"http_status={status}",
+            flush=True
+        )
+
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Proveedor de IA no disponible"}
+        )
 
     @app.get('/health')
     def health():
