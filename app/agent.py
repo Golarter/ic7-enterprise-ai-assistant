@@ -94,6 +94,16 @@ class Agent:
                     return ('No encontré información suficiente para responder sin consultar las fuentes o herramientas disponibles.', [], [])
                 if 'buscar_documentacion' in used and not evidence and not any(n in used for n in ('consultar_solicitud', 'clasificar_prioridad')):
                     return ('No encontré información suficiente en los documentos cargados.', used, [])
+                if re.search(
+                    r'no encontr[eé] informaci[oó]n suficiente',
+                    raw_answer,
+                    re.IGNORECASE
+                ):
+                    return (
+                        'No encontré información suficiente en los documentos cargados.',
+                            used,
+                            []
+                     )                    
                 if evidence and not re.search(r'\[F\d+\]', raw_answer):
                     # No inventar citas: forzar respuesta fundamentada de nuevo.
                     messages.extend([
