@@ -27,8 +27,25 @@ class GeminiClient:
         try:
             with request.urlopen(req, timeout=25) as response:
                 return json.loads(response.read())
+        except error.HTTPError as exc:
+            import logging
+            logging.getLogger("enterprise.aws").warning(
+                "Gemini HTTP error: status=%s model=%s operation=%s",
+                exc.code, model, verb
+            )
+            raise GeminiUnavailable(
+                "El proveedor Gemini no respondió correctamente"
+            ) from exc
+
         except (error.URLError, TimeoutError, ValueError) as exc:
-            raise GeminiUnavailable('El proveedor Gemini no respondió correctamente') from exc
+            import logging
+            logging.getLogger("enterprise.aws").warning(
+                "Gemini connection error: type=%s model=%s",
+                type(exc).__name__, model
+            )
+            raise GeminiUnavailable(
+                "El proveedor Gemini no respondió correctamente"
+            ) from exc
 
     def embed(self, values):
         # Usar embeddings del mismo modelo y dimensión para consultas y documentos.
