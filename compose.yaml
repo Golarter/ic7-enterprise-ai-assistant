@@ -1,0 +1,23 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    # Sin puertos publicados: solo accesible desde la red interna.
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      DATA_DIR: /service/data
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      - ollama
+    volumes:
+      - app_data:/service/data
+volumes:
+  ollama_data:
+  app_data:

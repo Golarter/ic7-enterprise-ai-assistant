@@ -1,0 +1,11 @@
+.env
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.venv/
+data/*
+!data/.gitkeep
+!data/solicitudes_demo.json
+*.db
+*.sqlite
+*.zip
