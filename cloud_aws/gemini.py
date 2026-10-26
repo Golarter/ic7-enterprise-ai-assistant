@@ -27,12 +27,50 @@ class GeminiClient:
         try:
             with request.urlopen(req, timeout=25) as response:
                 return json.loads(response.read())
+
         except error.HTTPError as exc:
             import logging
-            logging.getLogger("enterprise.aws").warning(
-                "Gemini HTTP error: status=%s model=%s operation=%s",
-                exc.code, model, verb
+
+            logger = logging.getLogger("enterprise.aws")
+
+            try:
+                body = exc.read(4096).decode(
+                    "utf-8", errors="replace"
+                )
+                response_error = json.loads(body).get("error", {})
+                if not isinstance(response_error, dict):
+                    response_error = {}
+
+                error_code = response_error.get(
+                    "status", "UNKNOWN"
+                )
+                error_message = response_error.get(
+                    "message", "Sin detalle"
+                )
+            except (ValueError, UnicodeError):
+                error_code = "UNKNOWN"
+                error_message = "Respuesta no interpretable"
+
+            # Evitar registrar credenciales o contenido sensible.
+            # Solo registrar detalles técnicos del proveedor.
+            logger.warning(
+                "IC7_GEMINI_HTTP status=%s model=%s "
+                "operation=%s error_code=%s",
+                exc.code,
+                model,
+                verb,
+                error_code
             )
+
+            print(
+                f"IC7_GEMINI_DIAGNOSTIC "
+                f"http_status={exc.code} "
+                f"model={model} "
+                f"operation={verb} "
+                f"error_code={error_code}",
+                flush=True
+            )
+
             raise GeminiUnavailable(
                 "El proveedor Gemini no respondió correctamente"
             ) from exc
