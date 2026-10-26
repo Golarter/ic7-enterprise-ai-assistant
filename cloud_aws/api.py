@@ -48,6 +48,12 @@ def create_cloud_app(llm=None, vector=None, audit=None):
         # 1. Credencial tradicional para pruebas y acceso directo.
         expected = os.getenv("APP_API_KEY", "")
 
+        if len(expected) < 20:
+            raise HTTPException(
+                status_code=503,
+                detail="Configurar APP_API_KEY antes de abrir la API"
+            )
+        
         if (
             len(expected) >= 20
             and x_api_key
