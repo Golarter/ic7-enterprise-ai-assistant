@@ -1,0 +1,70 @@
+name: Construir ZIP AWS Lambda (sin credenciales AWS)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Obtener codigo
+        uses: actions/checkout@v4
+
+      - name: Instalar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Empaquetar dependencias para Lambda x86_64
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          mkdir -p dist/lambda
+          python -m pip install \
+            --no-cache-dir --no-compile \
+            --platform manylinux2014_x86_64 \
+            --implementation cp \
+            --python-version 3.12 \
+            --only-binary=:all: \
+            --target dist/lambda \
+            -r requirements-aws.txt
+          cp -a app cloud_aws dist/lambda/
+          mkdir -p dist/lambda/data
+          cp data/solicitudes_demo.json dist/lambda/data/
+          cp lambda_function.py dist/lambda/
+          find dist/lambda -type d \( -name __pycache__ -o -name .pytest_cache \) -prune -exec rm -rf {} +
+          find dist/lambda -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+
+      - name: Crear ZIP y validar contenido
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd dist/lambda && zip -q -r ../ic7-lambda-deploy.zip .)
+          python - <<'PYVALIDATE'
+          from pathlib import Path
+          from zipfile import ZipFile
+          p = Path('dist/ic7-lambda-deploy.zip')
+          with ZipFile(p) as archive:
+              items = set(archive.namelist())
+              assert 'lambda_function.py' in items
+              assert 'app/agent.py' in items
+              assert 'cloud_aws/api.py' in items
+              assert 'mangum/__init__.py' in items
+              assert any(x.startswith('fastapi/') for x in items)
+          size = p.stat().st_size / (1024 * 1024)
+          print(f'ZIP creado: {size:.2f} MiB')
+          assert size < 50, 'Supera limite de subida directa en la consola AWS (50 MiB)'
+          PYVALIDATE
+
+      - name: Descargar paquete desde la pestaña Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: ic7-lambda-python312-x86_64
+          path: dist/ic7-lambda-deploy.zip
+          if-no-files-found: error
+          retention-days: 3
