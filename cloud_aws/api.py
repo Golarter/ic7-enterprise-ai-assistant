@@ -43,12 +43,58 @@ def create_cloud_app(llm=None, vector=None, audit=None):
             app.state.services = (model, index, history, Agent(model,index,store,.22))
         return app.state.services
 
-    def authorize(x_api_key: str | None = Header(None)):
-        expected = os.getenv('APP_API_KEY','')
-        if len(expected)<20:
-            raise HTTPException(503,'Configurar APP_API_KEY antes de abrir la API')
-        if not x_api_key or not hmac.compare_digest(x_api_key,expected):
-            raise HTTPException(401,'Credenciales inválidas')
+
+    def authorize(request: Request, x_api_key: str | None = Header(None)):
+        # 1. Credencial tradicional para pruebas y acceso directo.
+        expected = os.getenv("APP_API_KEY", "")
+
+        if (
+            len(expected) >= 20
+            and x_api_key
+            and hmac.compare_digest(x_api_key, expected)
+        ):
+            return
+
+        # 2. Autenticación validada previamente por API Gateway.
+        # No confiar en encabezados de identidad enviados por el cliente.
+        event = request.scope.get("aws.event", {})
+        if not isinstance(event, dict):
+            raise HTTPException(401, "Credenciales inválidas")
+
+        context = event.get("requestContext") or {}
+
+        # Aceptar solamente eventos identificados como nuestra API.
+        if context.get("apiId") != "xwejxdr534":
+            raise HTTPException(401, "Credenciales inválidas")
+
+        authorizer = context.get("authorizer") or {}
+
+        # Compatibilidad con las estructuras de autorización
+        # de API Gateway HTTP API.
+        jwt = authorizer.get("jwt") or {}
+        claims = jwt.get("claims") or authorizer.get("claims") or {}
+
+        if not isinstance(claims, dict):
+            raise HTTPException(401, "JWT inválido")
+
+        issuer = (
+            "https://cognito-idp.us-east-1.amazonaws.com/"
+            "us-east-1_IDR1J7OIo"
+        )
+
+        if (
+            claims.get("iss") != issuer
+            or claims.get("client_id") != "78ipamj1tmh1g10ffsld9471nj"
+            or claims.get("token_use") != "access"
+            or "email" not in str(claims.get("scope", "")).split()
+            or not claims.get("sub")
+        ):
+            raise HTTPException(401, "JWT inválido")
+
+        # Las firmas y expiración del JWT se verifican en
+        # API Gateway antes de invocar Lambda.
+        request.state.user_id = claims["sub"]
+        return
 
     @app.middleware('http')
     async def access_log(request:Request, call_next):
