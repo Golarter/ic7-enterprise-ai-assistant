@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FileText, UploadCloud, RefreshCw, Loader2 } from 'lucide-react';
+import { FileText, UploadCloud, RefreshCw, Loader2, Trash2 } from 'lucide-react';
 
 const shell = { flex: 1, overflowY: 'auto', padding: '30px', color: '#ecf1ff' };
 const panel = { maxWidth: 800, margin: '0 auto' };
@@ -15,6 +15,8 @@ export default function DocumentsView({ apiBaseUrl, accessToken }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [truncated, setTruncated] = useState(false);
+  const [toDelete, setToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const fileInput = useRef(null);
 
   const load = useCallback(async (signal) => {
@@ -71,6 +73,23 @@ export default function DocumentsView({ apiBaseUrl, accessToken }) {
     } finally { setUploading(false); }
   }
 
+  async function removeDocument() {
+    if (!toDelete || deleting) return;
+    setDeleting(true); setError(''); setNotice('');
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/documents/${encodeURIComponent(toDelete.document_id)}`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `HTTP ${res.status}`);
+      setToDelete(null);
+      setNotice(`Documento eliminado: ${toDelete.name} (${data.chunks_deleted} fragmentos).`);
+      await load();
+    } catch (err) {
+      setError(err.message || 'No se pudo eliminar el documento');
+    } finally { setDeleting(false); }
+  }
+
   return (
     <section style={shell} aria-label="Mis documentos">
       <div style={panel}>
@@ -95,7 +114,7 @@ export default function DocumentsView({ apiBaseUrl, accessToken }) {
         <div style={block}>
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12}}>
             <h3 style={{margin:0}}>Archivos privados ({items.length})</h3>
-            <button type="button" onClick={() => load()} disabled={busy || uploading}
+            <button type="button" onClick={() => load()} disabled={busy || uploading || deleting}
               style={{...buttonStyle, background:'#30436d'}}>
               <RefreshCw size={16} /> Actualizar
             </button>
@@ -105,14 +124,35 @@ export default function DocumentsView({ apiBaseUrl, accessToken }) {
           {items.map(doc => (
             <div key={doc.document_id} style={{display:'flex', gap:12, padding:'14px 0', borderBottom:'1px solid rgba(255,255,255,.08)'}}>
               <FileText size={20} style={{flexShrink:0}} />
-              <div style={{minWidth:0}}>
+              <div style={{minWidth:0, flex:1}}>
                 <strong style={{overflowWrap:'anywhere'}}>{doc.name}</strong>
                 <div style={{fontSize:12, color:'#aab9da', marginTop:5}}>
                   {doc.chunks} fragmento(s) · Privado · Indexado
                 </div>
               </div>
+              <button type="button" aria-label={`Eliminar ${doc.name}`} disabled={deleting || uploading}
+                onClick={() => setToDelete(doc)}
+                style={{...buttonStyle, marginLeft:'auto', background:'transparent', border:'1px solid #ae5162', color:'#ffc4cc'}}>
+                <Trash2 size={16} /> Eliminar
+              </button>
             </div>
           ))}
+          {toDelete && (
+            <div role="alertdialog" aria-modal="true" aria-label="Confirmar eliminación"
+              style={{...block, borderColor:'#ae5162'}}>
+              <strong>¿Eliminar este documento?</strong>
+              <p style={{overflowWrap:'anywhere'}}>Se eliminarán permanentemente los fragmentos de <b>{toDelete.name}</b>.
+                Esta acción no elimina las conversaciones guardadas.</p>
+              <div style={{display:'flex', justifyContent:'flex-end', gap:10}}>
+                <button type="button" disabled={deleting} onClick={() => setToDelete(null)}
+                  style={{...buttonStyle, background:'#30436d'}}>Cancelar</button>
+                <button type="button" disabled={deleting} onClick={removeDocument}
+                  style={{...buttonStyle, background:'#a3374c'}}>
+                  {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+                </button>
+              </div>
+            </div>
+          )}
           {truncated && <p role="status" style={{color:'#ffdfa1'}}>Listado parcial: se alcanzó el límite de la demo.</p>}
         </div>
       </div>

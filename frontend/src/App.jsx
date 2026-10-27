@@ -259,7 +259,7 @@ function Workspace() {
 
         <button className={view === 'chat' ? 'nav-active' : 'nav-item'}
           onClick={() => setView('chat')}
-          style={{width:'100%', textAlign:'left', cursor:'pointer', border:0}}>
+          style={{width:'100%', textAlign:'left', cursor:'pointer'}}>
           <Bot size={17} />
           Asistente empresarial
         </button>
@@ -280,14 +280,14 @@ function Workspace() {
 
         <button className={view === 'documents' ? 'nav-active' : 'nav-item'}
           onClick={() => setView('documents')}
-          style={{width:'100%', textAlign:'left', cursor:'pointer', border:0}}>
+          style={{width:'100%', textAlign:'left', cursor:'pointer'}}>
           <FileText size={17} />
           Documentos
         </button>
 
         <button className={view === 'conversations' ? 'nav-active' : 'nav-item'}
           onClick={() => setView('conversations')}
-          style={{width:'100%', textAlign:'left', cursor:'pointer', border:0}}>
+          style={{width:'100%', textAlign:'left', cursor:'pointer'}}>
           <CircleHelp size={17} />
           Mis conversaciones
         </button>
