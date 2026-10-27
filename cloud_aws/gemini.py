@@ -78,8 +78,8 @@ class GeminiClient:
         except (error.URLError, TimeoutError, ValueError) as exc:
             import logging
             logging.getLogger("enterprise.aws").warning(
-                "Gemini connection error: type=%s model=%s",
-                type(exc).__name__, model
+                "Gemini connection error: type=%s model=%s operation=%s",
+                type(exc).__name__, model, verb
             )
             raise GeminiUnavailable(
                 "El proveedor Gemini no respondió correctamente"
