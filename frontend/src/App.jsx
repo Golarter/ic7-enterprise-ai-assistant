@@ -16,6 +16,7 @@ import {
 import './App.css';
 import DocumentsView from './DocumentsView.jsx';
 import ConversationsView from './ConversationsView.jsx';
+import MarkdownAnswer from './MarkdownAnswer.jsx';
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || ''
@@ -166,7 +167,6 @@ function Workspace() {
               ? '#40212c'
               : '#19233e',
           border: '1px solid rgba(255,255,255,0.08)',
-          whiteSpace: 'pre-wrap',
           overflowWrap: 'anywhere'
         }}
       >
@@ -183,7 +183,9 @@ function Workspace() {
               : 'Asistente IA'}
         </div>
 
-        <div>{message.text}</div>
+        <div style={isUser || isError ? { whiteSpace: 'pre-wrap' } : undefined}>
+          {isUser || isError ? message.text : <MarkdownAnswer text={message.text} />}
+        </div>
 
         {message.sources?.length > 0 && (
           <div
