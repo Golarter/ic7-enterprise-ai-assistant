@@ -1,52 +1,62 @@
-# Arquitectura de referencia (MVP local)
+# Arquitectura IC7 — implementación AWS y alternativa local
+
+**Estado:** AWS implementado y probado el 27-10-2026. Este documento reemplaza la antigua descripción «AWS no desplegado».
+
+## Arquitectura AWS (ejecutada)
 
 ```mermaid
 flowchart TD
-  UI[Swagger / cliente HTTP] --> API[FastAPI: autenticación, validación, trazas]
-  API --> AG[Agente: tool calling acotado]
-  API --> ING[Ingesta TXT / MD / PDF]
-  ING --> CH[Chunking]
-  CH --> EMB[Ollama: EmbeddingGemma]
-  EMB --> VDB[(ChromaDB local persistente)]
-  AG --> RAG[Herramienta: buscar_documentacion]
-  RAG --> EMB
-  RAG --> VDB
-  AG --> SOL[Herramienta: consultar_solicitud]
-  SOL --> DB[(JSON mock de solicitudes)]
-  AG --> CLA[Herramienta: clasificar_prioridad]
-  AG --> LLM[Ollama: Qwen 3 4B Instruct]
-  API --> AUD[(SQLite: historial y trazas)]
+    U[Usuario web] --> A[React en AWS Amplify]
+    A --> C[Amazon Cognito: identidad JWT]
+    A --> G[API Gateway HTTP API: JWT authorizer]
+    G --> L[AWS Lambda Python 3.12 + FastAPI/Mangum]
+    L --> AG[Agente IC7 / rutas directas]
+    AG --> D[(DynamoDB documentos privados y vectores)]
+    AG --> H[(DynamoDB historial y auditoría)]
+    AG --> E[Gemini API: embeddings y generación]
+    AG --> T[Herramientas: solicitud simulada y prioridad por reglas]
+    L --> W[CloudWatch: trazas, errores y latencias]
 ```
 
-## Alternativa AWS (documentada, no desplegada)
+**Frontend:** `https://main.de7h6ja4dscnj.amplifyapp.com/`. **API:** `https://xwejxdr534.execute-api.us-east-1.amazonaws.com`. **Lambda:** `ic7-enterprise-ai-assistant` (`us-east-1`), Python 3.12, 256 MB, timeout 60 s. **Ruta `/api/ask`:** integración HTTP API con 30.000 ms. **Tablas DynamoDB:** `ic7-demo-docs` y `ic7-demo-audit`. **Proveedor:** Gemini externo (`gemini-embedding-001` para embeddings; `gemini-3.5-flash-lite` registrado en pruebas de generación). Los nombres reflejan el entorno demostrado, no recomendaciones universales.
 
-- API Gateway + Lambda para backend ligero; S3 para documentos; DynamoDB para estados, auditoría.
-- El vector store local persistente se reemplazaría por un servicio vectorial remoto compatible o una base de datos con extensión vectorial. No asumir que servicios gestionados vectoriales son gratuitos.
-- **El LLM local Ollama NO se ejecuta dentro de Lambda**: se reemplazaría por una API de inferencia externa o servicio AWS con facturación. Verificar disponibilidad, costos y privacidad antes de activar.
-- Los secretos se guardarían en un gestor adecuado, usando IAM de mínimos privilegios, TLS y separación dev/prod.
-- Sin autorización expresa, no se suben documentos corporativos reales a APIs externas con nivel gratuito.
-- Para pruebas sin costo, ejecutar local. El despliegue cloud es opcional en el enunciado si se documenta la arquitectura.
+## Flujos
 
-## Decisiones arquitectónicas
+1. **Ingesta:** JWT verificado; extraer texto TXT/MD/PDF admitido; fragmentar; obtener embeddings; almacenar documentos/vectores bajo partición privada del usuario.
+2. **RAG:** pregunta documental inequívoca → embedding de consulta → búsqueda en DynamoDB con filtros de similitud y propietario → hasta cuatro fragmentos de evidencia → Gemini para redactar → comprobar citas `[F#]` → responder con fuentes citadas. Si no hay evidencia relevante, abstenerse.
+3. **Herramientas estructuradas:** clasificación explícita de prioridad y consulta inequívoca de `SOL-1001` se resuelven directamente en Python/almacén simulado; otras intenciones usan agente con llamadas a herramientas. Sin escritura ni operaciones remotas arbitrarias.
+4. **Historial:** eventos de consulta y conversaciones aislados por identidad verificada de Cognito, con trazas correlacionables en CloudWatch.
 
-1. Monolito modular: apropiado para plazo de prueba y volumen reducido; microservicios agregarían costos de operación.
-2. Chroma persistente local: consulta vectorial con distancia coseno; no apto para Lambda efímera.
-3. Ollama: generación local sin cargos por tokens ni enviar documentos a servicios de terceros.
-4. Agente con tres herramientas de lectura con esquemas limitados y máximo tres rondas; sin escritura ni ejecución arbitraria.
-5. SQLite: transacciones simples de auditoría, útil para demo; cambiar por servicio multiusuario en nube.
-6. Referencias [F1] y metadatos de origen: evidencias trazables de cada respuesta documental.
-7. API key y límite de carga: controles mínimos; no sustituyen OAuth2/OIDC, roles ni control por documento.
+## Seguridad y decisiones
 
-## Riesgos y controles pendientes de producción
+- **Identidad:** Cognito JWT; no confiar en un `owner` proporcionado por el cliente. La partición de los documentos privados deriva de la identidad autenticada.
+- **Alcance:** pruebas de aislamiento entre dos usuarios se realizaron en la demo; no implican auditoría independiente de seguridad.
+- **Fuentes:** el código conserva solo fragmentos efectivamente citados; se rechazan referencias inexistentes y se tratan fragmentos como datos no confiables. No garantiza ausencia total de prompt injection.
+- **No servicio vectorial gestionado:** DynamoDB almacena y consulta vectores con búsqueda acotada. Es apropiado para corpus pequeño de demostración, no para grandes volúmenes.
+- **Latencia:** ruta documental corta y presupuesto de ejecución menor al timeout de integración. Retrasos externos de Gemini pueden producir HTTP 503.
+- **Observabilidad:** registros de operaciones `embedContent`, `generateContent`, duración de recuperación y `trace_id` sin volcar documentos ni claves.
 
-| Riesgo | Medida implementada en MVP | Faltante para producción |
+## Alternativa local — no confundir con AWS
+
+```mermaid
+flowchart LR
+    U[Swagger / cliente local] --> F[FastAPI local + X-API-Key]
+    F --> A[Agente]
+    A --> O[Ollama local: chat y embeddings]
+    A --> V[(Chroma persistente)]
+    F --> S[(SQLite historial)]
+    A --> M[(JSON solicitudes de demo)]
+```
+
+La variante local puede ejecutarse con Docker Compose y modelos Ollama; sus controles de autenticación e aislamiento no son equivalentes a los de AWS. Ver README para instalación.
+
+## Riesgos pendientes
+
+| Riesgo | Evidencia/control | Pendiente |
 |---|---|---|
-| Prompt injection | Mensaje de sistema, fragmentos no confiables, herramientas solo lectura | Red teaming, filtros y validación semántica de respuestas |
-| Fuga de datos | Modelo local y secretos en entorno, API key | RBAC por documento, cifrado, retención y DLP |
-| Alucinaciones | Referencias obligatorias para RAG, abstención sin evidencia | Verificador semántico, evaluación continua, revisión humana |
-| Abuso de API | Límite de tamaño, validación, auth | WAF, rate limiting, OAuth y auditoría centralizada |
-| Pérdida de datos | Volúmenes persistentes locales | Backups, restore, alta disponibilidad |
-| Trazabilidad | trace_id y SQLite | OpenTelemetry, observabilidad centralizada |
-| Dependencia de modelo | LLM parametrizable | Pruebas de regresión de modelo y control de versiones |
-
-**Importante:** los tests unitarios no son prueba suficiente de seguridad ante prompt injection real. Ejecutar evaluación real y revisar manualmente.
+| Indisponibilidad Gemini | Timeout controlado y error HTTP 503 observado | Reintentos presupuestados, métricas longitudinales, acuerdos proveedor |
+| Groundedness | Abstención, citas válidas, pruebas funcionales | Evaluación humana sobre corpus etiquetado, adversarial amplio |
+| Autorización | JWT y aislamiento privado probado | Revisión formal IAM/RBAC, pruebas multitenant extensivas |
+| Escalabilidad | RAG documental con pocos archivos | Motor vectorial indexado, carga concurrente y costos |
+| Datos | Demo simulada, logs sin contenido sensible | Retención, backups/restauración, cifrado y DLP verificados |
+| Costos | Servicios AWS/Gemini activos | Monitoreo de facturación, límites y alertas |

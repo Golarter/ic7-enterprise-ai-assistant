@@ -1,33 +1,22 @@
-# Matriz de cumplimiento — prueba I Cloud Seven
+# Matriz de cumplimiento — IC7 (corte 27-10-2026)
 
-Leyenda: **implementado** = código presente, no equivale a validación real; **pendiente** = necesita ejecución/verificación externa.
+**Criterio:** «demostrado» significa prueba concreta reportada; no significa garantía de producción.
 
-| Requisito del documento | Entrega | Estado |
+| Requisito | Evidencia | Estado |
 |---|---|---|
-| 5.1 API Python y manejo errores | `app/main.py`, `/docs` | Implementado; integración real pendiente |
-| 5.1 Consulta al asistente | `POST /api/ask` | Implementado |
-| 5.1 Ingesta de documentos | `POST /api/documents` | Implementado |
-| 5.1 Historial/logs | `GET /api/history/{session_id}`, `audit.sqlite3` | Implementado |
-| 5.2 Chunking | `app/document.py` | Implementado y testeado |
-| 5.2 Embeddings | `app/llm.py`, Ollama EmbeddingGemma | Implementado; Ollama real pendiente |
-| 5.2 Vector store | Chroma persistente | Implementado; integración real pendiente |
-| 5.2 Recuperación | `buscar_documentacion` | Implementado |
-| 5.2 Respuesta y fuentes | `[F1]` + excerpts | Implementado; groundedness real pendiente |
-| 5.3 Dos herramientas | Tres herramientas de solo lectura | Implementado y testeado con mocks |
-| 5.4 AI assisted development | README de transparencia y riesgos | Preparado; completar bitácora personal |
-| 5.5 Variables de entorno y secretos | `.env.example`, `X-API-Key`, `.gitignore` | Implementado |
-| 5.5 Logging, validación y errores | Middleware de trazas, Pydantic, HTTP | Implementado |
-| 5.5 Riesgos y readiness | `docs/arquitectura.md` | Documentado |
-| 5.6 5 preguntas + expected, observed | 8 casos en `scripts/evaluate.py` | Preparado; ejecutar contra IA real |
-| 5.6 Groundedness y accuracy | Heurística y casos de abstención/inyección | Preparado; validar manualmente |
-| 6 Repositorio | Código local para iniciar Git | Preparado; publicar por candidato |
-| 6 README | `README.md` | Implementado |
-| 6 Diagrama | Mermaid en `docs/arquitectura.md` | Implementado |
-| 6 Decisiones técnicas | `docs/arquitectura.md` | Implementado |
-| 6 Evidencia ejecutada | `pytest`, reporte real | Pendiente ejecutar y adjuntar |
-| 6 Video hasta 7 min | Guion en `docs/demo_video.md` | Pendiente grabar |
-| 6 Mejoras futuras | README y arquitectura | Documentado |
-| 6 Riesgos producción | Arquitectura | Documentado |
-| Nube | AWS diseño documentado | Despliegue opcional no realizado |
-
-No marcar como funcional o evaluado un servicio que no se ejecutó.
+| Backend Python y API | FastAPI, variante local y AWS Lambda/Mangum | Implementado y probado en AWS |
+| Consulta `/api/ask` | HTTP 200 en RAG MFA, prioridad, solicitudes | Demostrado |
+| Ingesta/chunking | Carga de documentos y tests; 10 documentos de prueba cargados en demo | Probado funcionalmente |
+| Embeddings y búsqueda vectorial | `gemini-embedding-001`, vectores en DynamoDB; 4 evidencias MFA | Demostrado |
+| Respuesta con fuentes | MFA con `[F1]`, `[F3]`; abstención sin evidencia | Demostrado en ejemplos |
+| 2+ herramientas de agente | Tres: documentación, solicitud, clasificación | Demostrado |
+| Autenticación | Cognito JWT en HTTP API; 401 no autenticado en verificaciones previas | Demostrado en pruebas reportadas |
+| Privacidad entre usuarios | Aislamiento documental e historial probado con dos cuentas | Evidencia funcional previa; no pentest |
+| Errores y logging | CloudWatch trazas, 503 ante timeout, métricas por operación | Demostrado |
+| Evaluación 5+ preguntas | Casos de negocio, desconocido y prompt injection; ver `docs/evaluacion_rag.md` | Evidencia parcial; faltan métricas agregadas |
+| Pruebas automatizadas | `pytest -q`: 55 passed in 1.82 s tras PR #5 | Demostrado |
+| Repositorio y PR | `Golarter/ic7-enterprise-ai-assistant`, PR #5, `main` `5f3b79b` | Demostrado |
+| Arquitectura y decisiones | `docs/arquitectura.md` | Actualizado |
+| Uso responsable de IA | README + decisiones; revisar y documentar validaciones humanas | Documentado parcialmente |
+| Video máximo 7 minutos | `docs/demo_video.md` | Guion preparado; grabación pendiente |
+| Preparación producción | `docs/security_validation.md` y riesgos | Pendientes controles operacionales |
