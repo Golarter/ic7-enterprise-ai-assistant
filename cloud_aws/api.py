@@ -20,6 +20,9 @@ from cloud_aws.gemini import GeminiClient, gemini_request_budget
 from cloud_aws.dynamo import DynamoVectorStore, DynamoAuditStore
 
 log = logging.getLogger('enterprise.aws')
+# Lambda configura el root logger en WARNING; habilitar INFO solo para IC7.
+# Se propaga al handler de CloudWatch existente, sin añadir manejadores duplicados.
+log.setLevel(logging.INFO)
 
 @dataclass(frozen=True)
 class Principal:

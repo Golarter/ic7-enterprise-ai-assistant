@@ -88,11 +88,27 @@ def _references(text: str) -> list[str]:
 def classify_priority(text: str):
     if len(text) > 2000:
         return {'error': 'Descripción demasiado extensa'}
-    s = text.casefold()
-    critical = ('fuga de datos', 'ransomware', 'brecha de seguridad', 'servicio caído', 'servicio caido', 'caída total')
-    high = ('no puedo ingresar', 'sin acceso', 'bloquea', 'vpn no funciona', 'no funciona')
-    if any(x in s for x in critical):
+    s = _normalize(str(text))
+    # Severidad basada en impacto operacional explícito, no solo frases exactas.
+    security = ('fuga de datos', 'ransomware', 'brecha de seguridad')
+    outage = re.search(
+        r'\b(caid[oa]s?|caid[oa]|sin servicio|fuera de servicio|no funciona|inoperativ[oa]s?|interrumpid[oa]s?)\b', s
+    )
+    broad_impact = (
+        'toda la empresa', 'toda la organizacion', 'todos los empleados',
+        'todos los usuarios', 'ningun empleado', 'nadie puede ingresar',
+        'ningun usuario', 'caida total', 'servicio caido',
+        'sistema caido', 'plataforma caida', 'aplicacion caida',
+    )
+    if any(x in s for x in security) or 'caida total' in s or (
+        outage and any(x in s for x in broad_impact)
+    ):
         return {'prioridad': 'Crítica', 'regla': 'Impacto crítico o seguridad'}
+    high = (
+        'no puedo ingresar', 'no puede ingresar', 'sin acceso', 'bloquea',
+        'vpn no funciona', 'no funciona', 'servicio caido', 'sistema caido',
+        'plataforma caida',
+    )
     if any(x in s for x in high):
         return {'prioridad': 'Alta', 'regla': 'Bloqueo operativo'}
     if any(x in s for x in ('actualizar', 'instalar', 'cambiar', 'modificar')):
