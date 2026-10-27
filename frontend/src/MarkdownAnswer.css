@@ -1,0 +1,26 @@
+.ic7-markdown { color: inherit; line-height: 1.65; overflow-wrap: anywhere; }
+.ic7-markdown > :first-child { margin-top: 0; }
+.ic7-markdown > :last-child { margin-bottom: 0; }
+.ic7-markdown p { margin: 0 0 0.85em; }
+.ic7-markdown h1, .ic7-markdown h2, .ic7-markdown h3, .ic7-markdown h4 {
+  font-weight: 700; line-height: 1.35; margin: 1.1em 0 0.5em; color: #f6f8ff;
+}
+.ic7-markdown h1 { font-size: 1.45rem; }
+.ic7-markdown h2 { font-size: 1.28rem; }
+.ic7-markdown h3 { font-size: 1.12rem; }
+.ic7-markdown h4 { font-size: 1rem; }
+.ic7-markdown ul, .ic7-markdown ol { padding-left: 1.5em; margin: .5em 0 1em; }
+.ic7-markdown li { margin: .25em 0; }
+.ic7-markdown li > p { margin-bottom: .35em; }
+.ic7-markdown strong { font-weight: 700; color: #fff; }
+.ic7-markdown a { color: #a9c7ff; text-decoration: underline; }
+.ic7-markdown a:hover { color: #d8e6ff; }
+.ic7-markdown blockquote { margin: 1em 0; padding: .25em 1em; border-left: 3px solid #6689d1; color: #c7d2eb; }
+.ic7-markdown code { border-radius: 4px; padding: .1em .3em; background: #111c33; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.ic7-markdown pre { padding: 1em; overflow-x: auto; background: #0e172a; border-radius: 8px; }
+.ic7-markdown pre code { padding: 0; background: none; white-space: pre; }
+.ic7-markdown table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; margin: 1em 0; }
+.ic7-markdown th, .ic7-markdown td { border: 1px solid #3a4c70; padding: .45em .7em; text-align: left; }
+.ic7-markdown th { background: #25375a; }
+.ic7-markdown hr { border: 0; border-top: 1px solid #3a4c70; margin: 1em 0; }
+.ic7-markdown input[type="checkbox"] { accent-color: #829dff; }
