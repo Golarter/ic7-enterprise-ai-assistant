@@ -11,8 +11,15 @@ const configured = Boolean(poolId && clientId && !poolId.includes('REEMPLAZAR') 
 const oidcConfig = {
   authority: `https://cognito-idp.${region}.amazonaws.com/${poolId}`,
   client_id: clientId,
-  redirect_uri: 'http://localhost:3000/',
-  post_logout_redirect_uri: 'http://localhost:3000/',
+  redirect_uri: `${window.location.origin}/`,
+  post_logout_redirect_uri: `${window.location.origin}/`,
+  onSigninCallback: () => {
+    window.history.replaceState(
+      {},
+      document.title,
+      window.location.pathname
+    );
+  },
   response_type: 'code',
   scope: 'openid email profile',
   onSigninCallback: () => window.history.replaceState({}, document.title, window.location.pathname),
