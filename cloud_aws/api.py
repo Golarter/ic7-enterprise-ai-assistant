@@ -156,6 +156,22 @@ def create_cloud_app(llm=None, vector=None, audit=None):
             return {'documents': [], 'truncated': False}
         return index.list_private(owner=principal.owner)
 
+    @app.delete('/api/documents/{doc_id}', dependencies=[Depends(authorize)])
+    def delete_my_document(doc_id: str, principal: Principal = Depends(authorize)):
+        # Derive the DynamoDB partition solely from the verified Cognito sub.
+        import re
+        if not principal.owner:
+            raise HTTPException(403, 'Se requiere usuario Cognito')
+        if not re.fullmatch(r'[0-9a-fA-F]{16,64}', doc_id):
+            raise HTTPException(422, 'Identificador de documento inválido')
+        index = services()[1]
+        if not isinstance(index, DynamoVectorStore):
+            raise HTTPException(503, 'Almacenamiento documental no disponible')
+        removed = index.delete_private(doc_id.lower(), owner=principal.owner)
+        if removed == 0:
+            raise HTTPException(404, 'Documento privado no encontrado')
+        return {'deleted': True, 'document_id': doc_id.lower(), 'chunks_deleted': removed}
+
     @app.post('/api/documents',response_model=UploadResponse, status_code=201,
               dependencies=[Depends(authorize)])
     async def upload(file:UploadFile=File(...), principal:Principal=Depends(authorize)):

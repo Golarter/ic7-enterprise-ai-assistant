@@ -109,6 +109,33 @@ class DynamoVectorStore:
         return {'documents': sorted(grouped.values(), key=lambda x: x['name'].casefold()),
                 'truncated': bool(cursor)}
 
+    def delete_private(self, doc_id, *, owner):
+        """Delete only the given document from the verified owner's partition.
+
+        Uses an exact sort-key prefix, never a table scan or a client-supplied pk.
+        The demo ingestion limit is 12 chunks; unexpected larger matches fail
+        before any deletion to avoid leaving partially deleted documents.
+        """
+        import re
+        from boto3.dynamodb.conditions import Key
+        if not owner:
+            raise ValueError('Se requiere propietario autenticado')
+        if not re.fullmatch(r'[0-9a-fA-F]{16,64}', doc_id):
+            raise ValueError('ID de documento inválido')
+        partition = f'USER#{owner}#DOC'
+        result = self.table.query(
+            KeyConditionExpression=Key('pk').eq(partition) & Key('sk').begins_with(doc_id.lower() + '#'),
+            ProjectionExpression='pk, sk',
+            Limit=13,
+        )
+        rows = result.get('Items', [])
+        if len(rows) > 12 or result.get('LastEvaluatedKey'):
+            raise ValueError('Documento excede los límites seguros de eliminación')
+        for row in rows:
+            # Preserve the exact queried keys; do not accept keys from client input.
+            self.table.delete_item(Key={'pk': partition, 'sk': row['sk']})
+        return len(rows)
+
     def count(self, *, owner=None):
         from boto3.dynamodb.conditions import Key
         partitions = ['DOC'] + ([f'USER#{owner}#DOC'] if owner else [])
