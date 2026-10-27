@@ -29,19 +29,53 @@ def test_cloud_healthy_without_configuration(monkeypatch):
         monkeypatch.delenv(k,raising=False)
     c=TestClient(create_cloud_app())
     assert c.get('/health').json()=={'status':'ok','platform':'aws-lambda','configured':False}
-    assert c.post('/api/ask',json={'question':'Estado SOL-1001'}).status_code==503
+    assert c.post('/api/ask',json={'question':'Estado SOL-1001'}).status_code==401
 
-def test_cloud_auth_tool_and_history(tmp_path,monkeypatch):
-    monkeypatch.setenv('APP_API_KEY','test-key-long-enough-for-cloud')
-    app=create_cloud_app(llm=StubLLM(), vector=StubVector(), audit=AuditStore(tmp_path/'traces.db'))
-    c=TestClient(app)
-    assert c.post('/api/ask',json={'question':'SOL-1001'}).status_code==401
-    r=c.post('/api/ask',headers={'X-API-Key':os.getenv('APP_API_KEY')},
-             json={'question':'¿Cómo va SOL-1001?','session_id':'test_aws'})
-    assert r.status_code==200,r.text
-    assert r.json()['tools_used']==['consultar_solicitud']
-    hist=c.get('/api/history/test_aws',headers={'X-API-Key':os.getenv('APP_API_KEY')})
-    assert hist.status_code==200 and hist.json()[0]['trace_id']==r.json()['trace_id']
+
+def test_cloud_auth_tool_and_history(tmp_path, monkeypatch):
+    monkeypatch.setenv(
+        'APP_API_KEY',
+        'test-key-long-enough-for-cloud'
+    )
+
+    app = create_cloud_app(
+        llm=StubLLM(),
+        vector=StubVector(),
+        audit=AuditStore(tmp_path / 'traces.db')
+    )
+
+    c = TestClient(app)
+
+    # Sin Cognito no hay acceso.
+    assert c.post(
+        '/api/ask',
+        json={'question': 'SOL-1001'}
+    ).status_code == 401
+
+    # La API key anterior ya no autoriza solicitudes.
+    r = c.post(
+        '/api/ask',
+        headers={
+            'X-API-Key': os.getenv('APP_API_KEY')
+        },
+        json={
+            'question': '¿Cómo va SOL-1001?',
+            'session_id': 'test_aws'
+        }
+    )
+
+    assert r.status_code == 401
+
+    # Tampoco permite recuperar historiales.
+    hist = c.get(
+        '/api/history/test_aws',
+        headers={
+            'X-API-Key': os.getenv('APP_API_KEY')
+        }
+    )
+
+    assert hist.status_code == 401
+
 
 def test_quantized_embeddings_roundtrip():
     a=[0.7,-0.2,0.,0.4]

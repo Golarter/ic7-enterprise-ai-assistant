@@ -75,4 +75,4 @@ def test_jwt_authenticated_histories_are_isolated(monkeypatch):
     with TestClient(app) as direct:
         assert direct.get('/api/history/shared-session',headers={'x-user-id':A}).status_code == 401
         legacy=direct.get('/api/history/shared-session',headers={'x-api-key':'test-key-long-enough-for-cloud'})
-        assert legacy.status_code == 200 and legacy.json() == []
+        assert legacy.status_code == 401

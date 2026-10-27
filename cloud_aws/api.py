@@ -80,16 +80,18 @@ def create_cloud_app(llm=None, vector=None, audit=None):
         return app.state.services
 
 
-    def authorize(request: Request, x_api_key: str | None = Header(None)) -> Principal:
-        expected = os.getenv('APP_API_KEY', '')
-        if len(expected) < 20:
-            raise HTTPException(503, 'Configurar APP_API_KEY antes de abrir la API')
-        if x_api_key and hmac.compare_digest(x_api_key, expected):
-            return Principal(kind='api_key')
+
+    def authorize(request: Request) -> Principal:
         principal = _verified_cognito_principal(request)
-        if principal is not None:
-            return principal
-        raise HTTPException(401, 'Credenciales inválidas')
+
+        if principal is None:
+            raise HTTPException(
+                status_code=401,
+                detail='Se requiere autenticación Cognito'
+            )
+
+        return principal
+
 
     @app.middleware('http')
     async def access_log(request:Request, call_next):
@@ -126,9 +128,17 @@ def create_cloud_app(llm=None, vector=None, audit=None):
 
     @app.get('/health')
     def health():
-        return {'status':'ok','platform':'aws-lambda','configured':
-                bool(os.getenv('APP_API_KEY') and os.getenv('GEMINI_API_KEY')
-                     and os.getenv('IC7_DOCS_TABLE') and os.getenv('IC7_AUDIT_TABLE'))}
+        configured = bool(
+            os.getenv('GEMINI_API_KEY')
+            and os.getenv('IC7_DOCS_TABLE')
+            and os.getenv('IC7_AUDIT_TABLE')
+        )
+
+        return {
+            'status': 'ok',
+            'platform': 'aws-lambda',
+            'configured': configured
+        }
 
     @app.get('/ready', dependencies=[Depends(authorize)])
     def ready():
