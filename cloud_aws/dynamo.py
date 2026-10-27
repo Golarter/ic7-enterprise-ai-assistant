@@ -27,7 +27,7 @@ class DynamoVectorStore:
         self.table = table
         self.max_docs = max_docs
 
-    def add(self, doc_id, name, parts, embeddings):
+    def add(self, doc_id, name, parts, embeddings, *, owner=None):
         if len(parts) != len(embeddings):
             raise ValueError('Embeddings inconsistentes')
         if len(parts) > 12:
@@ -35,18 +35,22 @@ class DynamoVectorStore:
         # 1 WCU aproximada por ítem pequeño; evitar documentos extensos en la demo.
         for i, (part, vec) in enumerate(zip(parts, embeddings), 1):
             self.table.put_item(Item={
-                'pk':'DOC', 'sk':f'{doc_id}#{i:04}', 'document':name,
+                'pk':f'USER#{owner}#DOC' if owner else 'DOC', 'sk':f'{doc_id}#{i:04}', 'document':name,
                 'chunk':i, 'excerpt':part[:900], 'v':_qencode(vec),
                 'embedding_model':os.getenv('GEMINI_EMBED_MODEL','gemini-embedding-001')},
                 ConditionExpression='attribute_not_exists(pk) AND attribute_not_exists(sk)')
 
-    def search(self, vector, count=4, min_similarity=0.22):
+    def search(self, vector, count=4, min_similarity=0.22, *, owner=None):
         from boto3.dynamodb.conditions import Key
-        res = self.table.query(KeyConditionExpression=Key('pk').eq('DOC'), Limit=self.max_docs)
+        # Biblioteca existente compartida + documentos privados del usuario actual.
+        partitions = ['DOC'] + ([f'USER#{owner}#DOC'] if owner else [])
+        items = []
+        for pk in partitions:
+            items.extend(self.table.query(KeyConditionExpression=Key('pk').eq(pk), Limit=self.max_docs).get('Items', []))
         q = _qdecode(_qencode(vector))
         qn = math.sqrt(sum(x*x for x in q)) or 1
         matches = []
-        for item in res.get('Items', []):
+        for item in items:
             if item.get('embedding_model') != os.getenv('GEMINI_EMBED_MODEL','gemini-embedding-001'):
                 continue
             v = _qdecode(item['v'])
@@ -59,28 +63,76 @@ class DynamoVectorStore:
                                 'excerpt':item['excerpt'], 'similarity':round(similarity,4)})
         return sorted(matches,key=lambda x:x['similarity'],reverse=True)[:count]
 
-    def count(self):
+    def list_private(self, *, owner, max_items=250):
+        """Enumera solo la particion privada; nunca expone textos ni embeddings."""
+        if not owner:
+            raise ValueError('Se requiere propietario autenticado')
         from boto3.dynamodb.conditions import Key
-        return self.table.query(KeyConditionExpression=Key('pk').eq('DOC'),
-                                Select='COUNT', Limit=self.max_docs).get('Count',0)
+        partition = f'USER#{owner}#DOC'
+        items = []
+        cursor = None
+        while len(items) < max_items:
+            kwargs = dict(
+                KeyConditionExpression=Key('pk').eq(partition),
+                ProjectionExpression='sk, #document, chunk',
+                ExpressionAttributeNames={'#document': 'document'},
+                Limit=min(50, max_items - len(items)),
+            )
+            if cursor:
+                kwargs['ExclusiveStartKey'] = cursor
+            result = self.table.query(**kwargs)
+            items.extend(result.get('Items', []))
+            cursor = result.get('LastEvaluatedKey')
+            if not cursor:
+                break
+        # Si se agota el limite entre fragmentos de un documento,
+        # no presentarlo como si estuviera indexado por completo.
+        incomplete_id = None
+        if cursor and items:
+            last_sk = str(items[-1].get('sk', ''))
+            if '#' in last_sk:
+                incomplete_id = last_sk.rsplit('#', 1)[0]
+        grouped = {}
+        for item in items:
+            sk = str(item.get('sk', ''))
+            if '#' not in sk:
+                continue
+            doc_id = sk.rsplit('#', 1)[0]
+            if doc_id == incomplete_id:
+                continue
+            row = grouped.setdefault(doc_id, {
+                'document_id': doc_id,
+                'name': str(item.get('document', '')),
+                'chunks': 0,
+            })
+            row['chunks'] += 1
+        return {'documents': sorted(grouped.values(), key=lambda x: x['name'].casefold()),
+                'truncated': bool(cursor)}
+
+    def count(self, *, owner=None):
+        from boto3.dynamodb.conditions import Key
+        partitions = ['DOC'] + ([f'USER#{owner}#DOC'] if owner else [])
+        return sum(self.table.query(KeyConditionExpression=Key('pk').eq(pk),
+                      Select='COUNT', Limit=self.max_docs).get('Count', 0)
+                   for pk in partitions)
 
 
 class DynamoAuditStore:
     def __init__(self, table):
         self.table = table
 
-    def save(self, *, trace_id, session_id, question, answer, tools_used, sources):
+    def save(self, *, trace_id, session_id, question, answer, tools_used, sources, owner=None):
         timestamp = datetime.now(timezone.utc).isoformat()
         self.table.put_item(Item={
-            'pk':f'SESSION#{session_id}', 'sk':f'{timestamp}#{trace_id}',
+            'pk':f'USER#{owner}#SESSION#{session_id}' if owner else f'SESSION#{session_id}', 'sk':f'{timestamp}#{trace_id}',
             'trace_id':trace_id, 'session_id':session_id,
             'question':question, 'answer':answer,
             'tools_used':json.dumps(tools_used,ensure_ascii=False),
             'sources':json.dumps(sources,ensure_ascii=False), 'timestamp':timestamp})
 
-    def history(self, session_id, limit=50):
+    def history(self, session_id, limit=50, *, owner=None):
         from boto3.dynamodb.conditions import Key
-        data = self.table.query(KeyConditionExpression=Key('pk').eq(f'SESSION#{session_id}'),
+        data = self.table.query(KeyConditionExpression=Key('pk').eq(f'USER#{owner}#SESSION#{session_id}' if owner else f'SESSION#{session_id}'),
                                 ScanIndexForward=False, Limit=min(limit,50))
         return [dict(trace_id=x['trace_id'], session_id=x['session_id'],question=x['question'],
                      answer=x['answer'],tools_used=json.loads(x['tools_used']),
