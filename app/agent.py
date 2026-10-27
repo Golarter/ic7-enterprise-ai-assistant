@@ -235,7 +235,61 @@ class Agent:
         msg = self.llm.chat(messages)
         return self._finish(str(msg.get('content') or '').strip(), used, evidence)
 
+    @staticmethod
+    def _structured_direct_intent(question: str):
+        """Solo peticiones independientes y explicitas; las mixtas van al agente.
+
+        No interpreta documentos ni autoriza acciones; ambas herramientas son lectura.
+        """
+        q = _normalize(question).strip()
+        # Requiere un imperativo de clasificacion al comienzo; la descripcion
+        # puede incluir cualquier incidente pero no otra peticion operativa.
+        match = re.fullmatch(
+            r'(?:clasifica(?: la prioridad)?|clasificar prioridad|'
+            r'que prioridad tiene|cual es la prioridad de)\s*[:?]?\s*(.+)',
+            q, flags=re.DOTALL,
+        )
+        if match:
+            description = match.group(1).strip()
+            if (description and not re.search(r'\bsol-\d{4,8}\b', description)
+                    and not re.search(r'\b(?:ademas|tambien|y consulta|y busca|y explica el procedimiento)\b', description)):
+                return 'clasificar_prioridad', {'descripcion': description}
+        # Solo consulta de estado con un identificador, sin otras instrucciones.
+        match = re.fullmatch(
+            r'(?:consulta(?: el estado de)?(?: la solicitud)?|'
+            r'consultar(?: el estado de)?(?: la solicitud)?|'
+            r'estado de(?: la solicitud)?|'
+            r'cual es el estado de(?: la solicitud)?)\s*'
+            r'(sol-\d{4,8})\s*[.?!]?', q,
+        )
+        if match:
+            return 'consultar_solicitud', {'codigo': match.group(1).upper()}
+        return None
+
+    def _answer_structured_direct(self, name: str, args: dict):
+        """Respuesta sin LLM a partir del resultado de la herramienta autorizada."""
+        result = self._run_tool(name, args, [], set())
+        if name == 'clasificar_prioridad':
+            if 'error' in result:
+                return result['error'], [name], []
+            return ('Prioridad sugerida: **{prioridad}**. Regla aplicada: {regla}. '
+                    'Clasificacion orientativa, no una decision automatica final.'.format(**result),
+                    [name], [])
+        if 'error' in result:
+            return result['error'], [name], []
+        solicitud = result.get('solicitud')
+        if not solicitud:
+            return 'Solicitud no encontrada.', [name], []
+        # Los campos proceden solo del almacen autorizado, no del modelo.
+        # JSON preserva contenido sin asumir un esquema de solicitud particular.
+        return ('Resultado de la solicitud {codigo}:\n```json\n{data}\n```'.format(
+            codigo=args['codigo'], data=json.dumps(solicitud, ensure_ascii=False, default=str, indent=2)),
+            [name], [])
+
     def answer(self, question: str):
+        direct = self._structured_direct_intent(question)
+        if direct is not None:
+            return self._answer_structured_direct(*direct)
         if self._documentary_intent(question):
             return self._answer_documentary(question)
         messages = [{'role': 'system', 'content': SYSTEM}, {'role': 'user', 'content': question}]
