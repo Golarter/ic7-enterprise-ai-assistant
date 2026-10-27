@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 
 import './App.css';
+import DocumentsView from './DocumentsView.jsx';
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || ''
@@ -22,6 +23,7 @@ const API_BASE_URL = (
 function Workspace() {
   const auth = useAuth();
 
+  const [view, setView] = useState('chat');
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState([]);
   const [sending, setSending] = useState(false);
@@ -130,6 +132,7 @@ function Workspace() {
       return;
     }
 
+    setView('chat');
     setMessages([]);
     setQuestion('');
     setError('');
@@ -244,10 +247,12 @@ function Workspace() {
           ESPACIO DE TRABAJO
         </div>
 
-        <div className="nav-active">
+        <button className={view === 'chat' ? 'nav-active' : 'nav-item'}
+          onClick={() => setView('chat')}
+          style={{width:'100%', textAlign:'left', cursor:'pointer', border:0}}>
           <Bot size={17} />
           Asistente empresarial
-        </div>
+        </button>
 
         <button
           className="nav-item"
@@ -263,11 +268,12 @@ function Workspace() {
           Nueva conversación
         </button>
 
-        <div className="nav-item">
+        <button className={view === 'documents' ? 'nav-active' : 'nav-item'}
+          onClick={() => setView('documents')}
+          style={{width:'100%', textAlign:'left', cursor:'pointer', border:0}}>
           <FileText size={17} />
           Documentos
-          <span className="soon">Próximamente</span>
-        </div>
+        </button>
 
         <div className="sidebar-bottom">
           <ShieldCheck size={17} />
@@ -295,6 +301,10 @@ function Workspace() {
           </div>
         </header>
 
+        {view === 'documents' ? (
+          <DocumentsView apiBaseUrl={API_BASE_URL} accessToken={auth.user?.access_token} />
+        ) : (
+          <>
         <section
           className="conversation"
           style={{
@@ -403,6 +413,8 @@ function Workspace() {
               : 'El chat se habilitará después de conectar la API.'}
           </small>
         </div>
+          </>
+        )}
       </main>
     </div>
   );

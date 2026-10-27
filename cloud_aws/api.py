@@ -146,6 +146,16 @@ def create_cloud_app(llm=None, vector=None, audit=None):
         return {'status':'ready' if model.healthy() else 'not_ready', 'model':model.chat_model,
                 'embedding_model':model.embed_model}
 
+    @app.get('/api/documents', dependencies=[Depends(authorize)])
+    def list_my_documents(principal: Principal = Depends(authorize)):
+        if not principal.owner:
+            raise HTTPException(403, 'Se requiere usuario Cognito')
+        index = services()[1]
+        if not isinstance(index, DynamoVectorStore):
+            # No mezclar listado privado con almacenes locales sin soporte de propietario.
+            return {'documents': [], 'truncated': False}
+        return index.list_private(owner=principal.owner)
+
     @app.post('/api/documents',response_model=UploadResponse, status_code=201,
               dependencies=[Depends(authorize)])
     async def upload(file:UploadFile=File(...), principal:Principal=Depends(authorize)):

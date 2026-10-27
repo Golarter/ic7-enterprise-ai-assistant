@@ -63,6 +63,52 @@ class DynamoVectorStore:
                                 'excerpt':item['excerpt'], 'similarity':round(similarity,4)})
         return sorted(matches,key=lambda x:x['similarity'],reverse=True)[:count]
 
+    def list_private(self, *, owner, max_items=250):
+        """Enumera solo la particion privada; nunca expone textos ni embeddings."""
+        if not owner:
+            raise ValueError('Se requiere propietario autenticado')
+        from boto3.dynamodb.conditions import Key
+        partition = f'USER#{owner}#DOC'
+        items = []
+        cursor = None
+        while len(items) < max_items:
+            kwargs = dict(
+                KeyConditionExpression=Key('pk').eq(partition),
+                ProjectionExpression='sk, #document, chunk',
+                ExpressionAttributeNames={'#document': 'document'},
+                Limit=min(50, max_items - len(items)),
+            )
+            if cursor:
+                kwargs['ExclusiveStartKey'] = cursor
+            result = self.table.query(**kwargs)
+            items.extend(result.get('Items', []))
+            cursor = result.get('LastEvaluatedKey')
+            if not cursor:
+                break
+        # Si se agota el limite entre fragmentos de un documento,
+        # no presentarlo como si estuviera indexado por completo.
+        incomplete_id = None
+        if cursor and items:
+            last_sk = str(items[-1].get('sk', ''))
+            if '#' in last_sk:
+                incomplete_id = last_sk.rsplit('#', 1)[0]
+        grouped = {}
+        for item in items:
+            sk = str(item.get('sk', ''))
+            if '#' not in sk:
+                continue
+            doc_id = sk.rsplit('#', 1)[0]
+            if doc_id == incomplete_id:
+                continue
+            row = grouped.setdefault(doc_id, {
+                'document_id': doc_id,
+                'name': str(item.get('document', '')),
+                'chunks': 0,
+            })
+            row['chunks'] += 1
+        return {'documents': sorted(grouped.values(), key=lambda x: x['name'].casefold()),
+                'truncated': bool(cursor)}
+
     def count(self, *, owner=None):
         from boto3.dynamodb.conditions import Key
         partitions = ['DOC'] + ([f'USER#{owner}#DOC'] if owner else [])
