@@ -129,6 +129,16 @@ class DynamoAuditStore:
             'question':question, 'answer':answer,
             'tools_used':json.dumps(tools_used,ensure_ascii=False),
             'sources':json.dumps(sources,ensure_ascii=False), 'timestamp':timestamp})
+        if owner:
+            # Eventos cronológicos para descubrir sesiones sin Scan ni GSI.
+            # El índice no contiene respuestas ni fuentes privadas.
+            self.table.put_item(Item={
+                'pk': f'USER#{owner}#SESSIONS',
+                'sk': f'{timestamp}#{trace_id}',
+                'session_id': session_id,
+                'last_question': question[:140],
+                'updated_at': timestamp,
+            })
 
     def history(self, session_id, limit=50, *, owner=None):
         from boto3.dynamodb.conditions import Key
@@ -137,6 +147,50 @@ class DynamoAuditStore:
         return [dict(trace_id=x['trace_id'], session_id=x['session_id'],question=x['question'],
                      answer=x['answer'],tools_used=json.loads(x['tools_used']),
                      sources=json.loads(x['sources']),timestamp=x['timestamp']) for x in data.get('Items',[])]
+
+    def list_sessions(self, *, owner, limit=30, max_events=200):
+        """Devuelve sesiones recientes únicas, acotadas a max_events eventos.
+
+        Para la demo, un evento por consulta permite ordenar por actividad
+        con Query de DynamoDB, sin Scan, GSI ni UpdateItem.
+        """
+        if not owner:
+            raise ValueError('Se requiere propietario autenticado')
+        from boto3.dynamodb.conditions import Key
+        limit = max(1, min(int(limit), 50))
+        max_events = max(limit, min(int(max_events), 500))
+        result_items = []
+        cursor = None
+        while len(result_items) < max_events:
+            kwargs = {
+                'KeyConditionExpression': Key('pk').eq(f'USER#{owner}#SESSIONS'),
+                'ScanIndexForward': False,
+                'Limit': min(50, max_events-len(result_items)),
+                'ProjectionExpression': 'session_id, last_question, updated_at',
+            }
+            if cursor:
+                kwargs['ExclusiveStartKey'] = cursor
+            result = self.table.query(**kwargs)
+            result_items.extend(result.get('Items', []))
+            cursor = result.get('LastEvaluatedKey')
+            if not cursor:
+                break
+        seen = set()
+        sessions = []
+        for item in result_items:
+            sid = item.get('session_id')
+            if not isinstance(sid, str) or sid in seen:
+                continue
+            seen.add(sid)
+            sessions.append({
+                'session_id': sid,
+                'title': str(item.get('last_question') or 'Conversación')[:140],
+                'updated_at': str(item.get('updated_at') or ''),
+            })
+            if len(sessions) >= limit:
+                break
+        return {'conversations': sessions,
+                'truncated': bool(cursor) or len(seen) > limit or len(result_items) >= max_events}
 
     def count(self):
         # DynamoDB item_count es aproximado; nunca se muestra como cifra exacta de auditoría.

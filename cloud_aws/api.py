@@ -201,6 +201,15 @@ def create_cloud_app(llm=None, vector=None, audit=None):
         return AskResponse(answer=text,session_id=session_id,trace_id=trace,
                            tools_used=tools,sources=sources)
 
+    @app.get('/api/conversations', dependencies=[Depends(authorize)])
+    def list_my_conversations(principal: Principal = Depends(authorize)):
+        if not principal.owner:
+            raise HTTPException(403, 'Se requiere usuario Cognito')
+        audit = services()[2]
+        if not isinstance(audit, DynamoAuditStore):
+            return {'conversations': [], 'truncated': False}
+        return audit.list_sessions(owner=principal.owner)
+
     @app.get('/api/history/{session_id}',response_model=list[HistoryItem],
              dependencies=[Depends(authorize)])
     def get_history(session_id:str, principal:Principal=Depends(authorize)):

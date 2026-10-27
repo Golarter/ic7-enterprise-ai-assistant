@@ -15,6 +15,7 @@ import {
 
 import './App.css';
 import DocumentsView from './DocumentsView.jsx';
+import ConversationsView from './ConversationsView.jsx';
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || ''
@@ -125,6 +126,15 @@ function Workspace() {
     } finally {
       setSending(false);
     }
+  }
+
+  function abrirConversacion(previousSessionId, previousMessages) {
+    if (sending) return;
+    setSessionId(previousSessionId);
+    setMessages(previousMessages);
+    setQuestion('');
+    setError('');
+    setView('chat');
   }
 
   function nuevaConversacion() {
@@ -275,6 +285,13 @@ function Workspace() {
           Documentos
         </button>
 
+        <button className={view === 'conversations' ? 'nav-active' : 'nav-item'}
+          onClick={() => setView('conversations')}
+          style={{width:'100%', textAlign:'left', cursor:'pointer', border:0}}>
+          <CircleHelp size={17} />
+          Mis conversaciones
+        </button>
+
         <div className="sidebar-bottom">
           <ShieldCheck size={17} />
           Sesión segura con Cognito
@@ -303,6 +320,10 @@ function Workspace() {
 
         {view === 'documents' ? (
           <DocumentsView apiBaseUrl={API_BASE_URL} accessToken={auth.user?.access_token} />
+        ) : view === 'conversations' ? (
+          <ConversationsView apiBaseUrl={API_BASE_URL}
+            accessToken={auth.user?.access_token}
+            onOpenConversation={abrirConversacion} />
         ) : (
           <>
         <section
