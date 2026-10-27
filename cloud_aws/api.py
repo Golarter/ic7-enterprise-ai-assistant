@@ -16,10 +16,13 @@ from app.document import extract_text, chunks, document_id, ALLOWED
 from app.schemas import AskRequest, AskResponse, HistoryItem, UploadResponse
 from app.storage import RequestsStore
 from cloud_aws.gemini import GeminiUnavailable
-from cloud_aws.gemini import GeminiClient
+from cloud_aws.gemini import GeminiClient, gemini_request_budget
 from cloud_aws.dynamo import DynamoVectorStore, DynamoAuditStore
 
 log = logging.getLogger('enterprise.aws')
+# Lambda configura el root logger en WARNING; habilitar INFO solo para IC7.
+# Se propaga al handler de CloudWatch existente, sin añadir manejadores duplicados.
+log.setLevel(logging.INFO)
 
 @dataclass(frozen=True)
 class Principal:
@@ -207,7 +210,9 @@ def create_cloud_app(llm=None, vector=None, audit=None):
         # No global mutable user context on cached Agent instance.
         if principal.owner and isinstance(index, DynamoVectorStore):
             agent = Agent(model, ScopedVector(index, principal.owner), agent.requests, .22)
-        text,tools,sources=agent.answer(body.question)
+        # Presupuesto menor que los 30s de integración API Gateway.
+        with gemini_request_budget(26):
+            text,tools,sources=agent.answer(body.question)
         trace=request.state.trace_id
         save_args = dict(trace_id=trace,session_id=session_id,question=body.question,
                          answer=text,tools_used=tools,sources=sources)

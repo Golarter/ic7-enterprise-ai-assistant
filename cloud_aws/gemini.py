@@ -5,10 +5,26 @@ Retiene íntegramente partes/signatures al reconstruir function calling.
 """
 import json
 import os
+import time
+import logging
+from contextvars import ContextVar
+from contextlib import contextmanager
 from urllib import request, error
 
 class GeminiUnavailable(RuntimeError):
     pass
+
+# Deadline aislado por contexto de solicitud; el GeminiClient es compartido
+# entre invocaciones warm de Lambda, nunca guardar deadline en self.
+_REQUEST_DEADLINE = ContextVar('ic7_gemini_deadline', default=None)
+
+@contextmanager
+def gemini_request_budget(seconds=26):
+    token = _REQUEST_DEADLINE.set(time.monotonic() + seconds)
+    try:
+        yield
+    finally:
+        _REQUEST_DEADLINE.reset(token)
 
 
 class GeminiClient:
@@ -24,13 +40,18 @@ class GeminiClient:
         url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':' + verb
         req = request.Request(url, method='POST', data=json.dumps(payload).encode(),
                               headers={'Content-Type':'application/json', 'x-goog-api-key':self.key})
+        started = time.monotonic()
+        deadline = _REQUEST_DEADLINE.get()
+        remaining = (deadline - started) if deadline is not None else 25.0
+        if remaining <= 1.5:
+            raise GeminiUnavailable('Presupuesto de consulta Gemini agotado')
+        # Limitar una única llamada: la consulta completa debe caber en API Gateway.
+        timeout = min(12.0, remaining - 1.0)
         try:
-            with request.urlopen(req, timeout=25) as response:
+            with request.urlopen(req, timeout=timeout) as response:
                 return json.loads(response.read())
 
         except error.HTTPError as exc:
-            import logging
-
             logger = logging.getLogger("enterprise.aws")
 
             try:
@@ -76,14 +97,17 @@ class GeminiClient:
             ) from exc
 
         except (error.URLError, TimeoutError, ValueError) as exc:
-            import logging
             logging.getLogger("enterprise.aws").warning(
-                "Gemini connection error: type=%s model=%s",
-                type(exc).__name__, model
+                "Gemini connection error: type=%s model=%s operation=%s",
+                type(exc).__name__, model, verb
             )
             raise GeminiUnavailable(
                 "El proveedor Gemini no respondió correctamente"
             ) from exc
+        finally:
+            logging.getLogger('enterprise.aws').info(
+                'IC7_GEMINI_TIMING operation=%s model=%s duration_ms=%.0f',
+                verb, model, (time.monotonic() - started) * 1000)
 
     def embed(self, values):
         # Usar embeddings del mismo modelo y dimensión para consultas y documentos.
