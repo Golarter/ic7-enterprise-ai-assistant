@@ -1,7 +1,7 @@
 # Desarrollo asistido por IA (AI-assisted development) — IC7
 
-**Proyecto:** IC7 Enterprise AI Assistant  
-**Fecha de corte:** 28 de octubre de 2026  
+**Proyecto:** IC7 Enterprise AI Assistant
+**Fecha de corte:** 28 de octubre de 2026
 **Alcance:** explicación del proceso de asistencia y verificación durante el desarrollo de esta prueba técnica.
 
 ## 1. Herramientas y alcance real
